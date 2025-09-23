@@ -51,7 +51,7 @@ class OrdersModelTestCase(TestCase):
     
     def test_vehicle_creation(self):
         """Test vehicle model creation."""
-        self.assertEqual(str(self.vehicle), "TEST-123 - Toyota Hiace")
+        self.assertEqual(str(self.vehicle), "TEST-123 - Toyota Hiace - Unassigned")
         self.assertEqual(self.vehicle.status, 'ACTIVE')
         self.assertEqual(self.vehicle.capacity_kg, 500.0)
     
@@ -374,3 +374,211 @@ class OrderAPITestCase(APITestCase):
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('error', response.data)
+
+
+class VehicleAPITestCase(APITestCase):
+    """Test cases for Vehicle management API endpoints."""
+    
+    def setUp(self):
+        # Create test users
+        self.customer = User.objects.create_user(
+            username='testcustomer',
+            email='customer@test.com',
+            password='testpass123',
+            role='CUSTOMER'
+        )
+        self.driver = User.objects.create_user(
+            username='testdriver',
+            email='driver@test.com',
+            password='testpass123',
+            role='DRIVER'
+        )
+        self.dispatcher = User.objects.create_user(
+            username='testdispatcher',
+            email='dispatcher@test.com',
+            password='testpass123',
+            role='DISPATCHER'
+        )
+        
+        # Generate JWT tokens
+        self.customer_tokens = JWTService.generate_token_pair(self.customer)
+        self.driver_tokens = JWTService.generate_token_pair(self.driver)
+        self.dispatcher_tokens = JWTService.generate_token_pair(self.dispatcher)
+    
+    def get_auth_header(self, tokens):
+        """Helper method to get authorization header."""
+        return f"Bearer {tokens['access_token']}"
+    
+    def test_create_vehicle_success(self):
+        """Test successful vehicle creation by dispatcher."""
+        url = reverse('orders:create_vehicle')
+        data = {
+            'plate_number': 'KCA-123A',
+            'model': 'Toyota Hiace',
+            'capacity_kg': 750.0,
+            'status': 'ACTIVE'
+        }
+        
+        self.client.credentials(
+            HTTP_AUTHORIZATION=self.get_auth_header(self.dispatcher_tokens)
+        )
+        
+        response = self.client.post(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn('vehicle', response.data)
+        self.assertEqual(response.data['vehicle']['plate_number'], 'KCA-123A')
+        self.assertEqual(response.data['vehicle']['model'], 'Toyota Hiace')
+    
+    def test_create_vehicle_permission_denied(self):
+        """Test vehicle creation permission denied for customers."""
+        url = reverse('orders:create_vehicle')
+        data = {
+            'plate_number': 'KCA-123A',
+            'model': 'Toyota Hiace',
+            'capacity_kg': 750.0
+        }
+        
+        self.client.credentials(
+            HTTP_AUTHORIZATION=self.get_auth_header(self.customer_tokens)
+        )
+        
+        response = self.client.post(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+    
+    def test_create_vehicle_validation_errors(self):
+        """Test vehicle creation validation errors."""
+        url = reverse('orders:create_vehicle')
+        
+        self.client.credentials(
+            HTTP_AUTHORIZATION=self.get_auth_header(self.dispatcher_tokens)
+        )
+        
+        # Test with invalid capacity
+        data = {
+            'plate_number': 'KCA-123A',
+            'model': 'Toyota Hiace',
+            'capacity_kg': -100.0  # Invalid negative capacity
+        }
+        
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        
+        # Test with short plate number
+        data = {
+            'plate_number': 'AB',  # Too short
+            'model': 'Toyota Hiace',
+            'capacity_kg': 750.0
+        }
+        
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+    
+    def test_list_vehicles(self):
+        """Test listing vehicles."""
+        # Create test vehicles
+        vehicle1 = Vehicle.objects.create(
+            plate_number='KCA-123A',
+            model='Toyota Hiace',
+            capacity_kg=750.0,
+            status='ACTIVE'
+        )
+        vehicle2 = Vehicle.objects.create(
+            plate_number='KCA-456B',
+            model='Isuzu Truck',
+            capacity_kg=1000.0,
+            status='IN_MAINTENANCE'
+        )
+        
+        url = reverse('orders:list_vehicles')
+        self.client.credentials(
+            HTTP_AUTHORIZATION=self.get_auth_header(self.dispatcher_tokens)
+        )
+        
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('results', response.data)
+        self.assertEqual(len(response.data['results']), 2)
+    
+    def test_assign_driver_to_vehicle_success(self):
+        """Test successful driver assignment to vehicle."""
+        # Create a vehicle
+        vehicle = Vehicle.objects.create(
+            plate_number='KCA-123A',
+            model='Toyota Hiace',
+            capacity_kg=750.0,
+            status='ACTIVE'
+        )
+        
+        url = reverse('orders:assign_driver_to_vehicle')
+        data = {
+            'vehicle_id': vehicle.id,
+            'driver_id': self.driver.id
+        }
+        
+        self.client.credentials(
+            HTTP_AUTHORIZATION=self.get_auth_header(self.dispatcher_tokens)
+        )
+        
+        response = self.client.post(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('vehicle', response.data)
+        
+        # Verify driver assigned
+        vehicle.refresh_from_db()
+        self.assertEqual(vehicle.driver, self.driver)
+    
+    def test_unassign_driver_from_vehicle(self):
+        """Test unassigning driver from vehicle."""
+        # Create a vehicle with assigned driver
+        vehicle = Vehicle.objects.create(
+            plate_number='KCA-123A',
+            model='Toyota Hiace',
+            capacity_kg=750.0,
+            status='ACTIVE',
+            driver=self.driver
+        )
+        
+        url = reverse('orders:assign_driver_to_vehicle')
+        data = {
+            'vehicle_id': vehicle.id,
+            'driver_id': None  # Unassign driver
+        }
+        
+        self.client.credentials(
+            HTTP_AUTHORIZATION=self.get_auth_header(self.dispatcher_tokens)
+        )
+        
+        response = self.client.post(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Verify driver unassigned
+        vehicle.refresh_from_db()
+        self.assertIsNone(vehicle.driver)
+    
+    def test_assign_driver_permission_denied(self):
+        """Test driver assignment permission denied for customers."""
+        vehicle = Vehicle.objects.create(
+            plate_number='KCA-123A',
+            model='Toyota Hiace',
+            capacity_kg=750.0,
+            status='ACTIVE'
+        )
+        
+        url = reverse('orders:assign_driver_to_vehicle')
+        data = {
+            'vehicle_id': vehicle.id,
+            'driver_id': self.driver.id
+        }
+        
+        self.client.credentials(
+            HTTP_AUTHORIZATION=self.get_auth_header(self.customer_tokens)
+        )
+        
+        response = self.client.post(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

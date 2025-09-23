@@ -18,6 +18,14 @@ class Vehicle(models.Model):
     model = models.CharField(max_length=100)
     capacity_kg = models.FloatField(validators=[MinValueValidator(0.0)])
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ACTIVE')
+    driver = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        limit_choices_to={'role': 'DRIVER'},
+        related_name='assigned_vehicle'
+    )
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -25,9 +33,11 @@ class Vehicle(models.Model):
         db_table = 'vehicles'
         verbose_name = 'Vehicle'
         verbose_name_plural = 'Vehicles'
+        ordering = ['-created_at']
     
     def __str__(self):
-        return f"{self.plate_number} - {self.model}"
+        driver_info = f" - Driver: {self.driver.username}" if self.driver else " - Unassigned"
+        return f"{self.plate_number} - {self.model}{driver_info}"
 
 
 class DriverAssignment(models.Model):

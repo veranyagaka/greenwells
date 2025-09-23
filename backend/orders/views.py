@@ -12,7 +12,8 @@ import math
 
 from .models import Vehicle, DriverAssignment, Order, Delivery, TrackingLog
 from .serializers import (
-    VehicleSerializer, DriverAssignmentSerializer, OrderCreateSerializer,
+    VehicleSerializer, VehicleCreateSerializer, VehicleDriverAssignmentSerializer,
+    DriverAssignmentSerializer, OrderCreateSerializer,
     OrderSerializer, OrderStatusUpdateSerializer, DeliverySerializer,
     DeliveryAssignmentSerializer, TrackingLogSerializer
 )
@@ -489,4 +490,226 @@ def get_delivery_tracking(request, delivery_id):
         logger.error(f"Get tracking error: {str(e)}")
         return Response({
             'error': 'Internal server error while fetching tracking data'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ============= VEHICLE MANAGEMENT VIEWS =============
+
+@api_view(['POST'])
+@permission_classes([IsDispatcherOrAdmin])
+def create_vehicle(request):
+    """
+    Create a new vehicle.
+    
+    Only dispatchers and admins can create vehicles.
+    """
+    try:
+        serializer = VehicleCreateSerializer(data=request.data)
+        
+        if serializer.is_valid():
+            vehicle = serializer.save()
+            
+            logger.info(f"Vehicle {vehicle.plate_number} created by {request.user.username}")
+            
+            # Return created vehicle details
+            vehicle_serializer = VehicleSerializer(vehicle)
+            
+            return Response({
+                'message': 'Vehicle created successfully',
+                'vehicle': vehicle_serializer.data
+            }, status=status.HTTP_201_CREATED)
+        
+        return Response({
+            'error': 'Vehicle creation failed',
+            'details': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+        
+    except Exception as e:
+        logger.error(f"Vehicle creation error: {str(e)}")
+        return Response({
+            'error': 'Internal server error during vehicle creation'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def list_vehicles(request):
+    """
+    List all vehicles.
+    
+    All authenticated users can view vehicles.
+    """
+    try:
+        vehicles = Vehicle.objects.all().select_related('driver')
+        
+        # Apply filters from query parameters
+        status_filter = request.GET.get('status')
+        if status_filter:
+            vehicles = vehicles.filter(status=status_filter)
+        
+        available_only = request.GET.get('available_only')
+        if available_only and available_only.lower() == 'true':
+            vehicles = vehicles.filter(driver__isnull=True, status='ACTIVE')
+        
+        # Pagination
+        paginator = OrderPagination()
+        page = paginator.paginate_queryset(vehicles, request)
+        
+        if page is not None:
+            serializer = VehicleSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
+        serializer = VehicleSerializer(vehicles, many=True)
+        return Response({
+            'vehicles': serializer.data
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"List vehicles error: {str(e)}")
+        return Response({
+            'error': 'Internal server error while fetching vehicles'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_vehicle(request, vehicle_id):
+    """Get specific vehicle details."""
+    try:
+        vehicle = Vehicle.objects.select_related('driver').get(id=vehicle_id)
+        
+        serializer = VehicleSerializer(vehicle)
+        
+        return Response({
+            'vehicle': serializer.data
+        }, status=status.HTTP_200_OK)
+        
+    except Vehicle.DoesNotExist:
+        return Response({
+            'error': 'Vehicle not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        logger.error(f"Get vehicle error: {str(e)}")
+        return Response({
+            'error': 'Internal server error while fetching vehicle'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsDispatcherOrAdmin])
+def update_vehicle(request, vehicle_id):
+    """
+    Update vehicle details.
+    
+    Only dispatchers and admins can update vehicles.
+    """
+    try:
+        vehicle = Vehicle.objects.get(id=vehicle_id)
+        
+        serializer = VehicleCreateSerializer(vehicle, data=request.data, partial=True)
+        
+        if serializer.is_valid():
+            vehicle = serializer.save()
+            
+            logger.info(f"Vehicle {vehicle.plate_number} updated by {request.user.username}")
+            
+            vehicle_serializer = VehicleSerializer(vehicle)
+            
+            return Response({
+                'message': 'Vehicle updated successfully',
+                'vehicle': vehicle_serializer.data
+            }, status=status.HTTP_200_OK)
+        
+        return Response({
+            'error': 'Vehicle update failed',
+            'details': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+        
+    except Vehicle.DoesNotExist:
+        return Response({
+            'error': 'Vehicle not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        logger.error(f"Vehicle update error: {str(e)}")
+        return Response({
+            'error': 'Internal server error during vehicle update'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsDispatcherOrAdmin])
+def assign_driver_to_vehicle(request):
+    """
+    Assign or unassign a driver to a vehicle.
+    
+    Only dispatchers and admins can assign drivers to vehicles.
+    """
+    try:
+        serializer = VehicleDriverAssignmentSerializer(data=request.data)
+        
+        if not serializer.is_valid():
+            return Response({
+                'error': 'Invalid assignment data',
+                'details': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        validated_data = serializer.validated_data
+        vehicle_id = validated_data['vehicle_id']
+        driver_id = validated_data.get('driver_id')
+        
+        with transaction.atomic():
+            vehicle = Vehicle.objects.select_for_update().get(id=vehicle_id)
+            
+            # If driver_id is None, unassign current driver
+            if driver_id is None:
+                old_driver = vehicle.driver
+                vehicle.driver = None
+                vehicle.save()
+                
+                message = f"Driver unassigned from vehicle {vehicle.plate_number}"
+                if old_driver:
+                    logger.info(f"Driver {old_driver.username} unassigned from vehicle {vehicle.plate_number} by {request.user.username}")
+                else:
+                    logger.info(f"Vehicle {vehicle.plate_number} had no assigned driver")
+            else:
+                # Assign new driver
+                driver = User.objects.get(id=driver_id)
+                
+                # Unassign driver from any previous vehicle
+                try:
+                    old_vehicle = Vehicle.objects.get(driver=driver)
+                    old_vehicle.driver = None
+                    old_vehicle.save()
+                    logger.info(f"Driver {driver.username} reassigned from vehicle {old_vehicle.plate_number} to {vehicle.plate_number}")
+                except Vehicle.DoesNotExist:
+                    # Driver was not assigned to any vehicle
+                    pass
+                
+                # Assign to new vehicle
+                vehicle.driver = driver
+                vehicle.save()
+                
+                message = f"Driver {driver.username} assigned to vehicle {vehicle.plate_number}"
+                logger.info(f"Driver {driver.username} assigned to vehicle {vehicle.plate_number} by {request.user.username}")
+            
+            # Return updated vehicle details
+            vehicle_serializer = VehicleSerializer(vehicle)
+            
+            return Response({
+                'message': message,
+                'vehicle': vehicle_serializer.data
+            }, status=status.HTTP_200_OK)
+        
+    except Vehicle.DoesNotExist:
+        return Response({
+            'error': 'Vehicle not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except User.DoesNotExist:
+        return Response({
+            'error': 'Driver not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        logger.error(f"Driver-vehicle assignment error: {str(e)}")
+        return Response({
+            'error': 'Internal server error during driver-vehicle assignment'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

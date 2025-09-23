@@ -10,10 +10,75 @@ User = get_user_model()
 class VehicleSerializer(serializers.ModelSerializer):
     """Serializer for Vehicle model."""
     
+    driver_name = serializers.CharField(source='driver.username', read_only=True)
+    driver_email = serializers.CharField(source='driver.email', read_only=True)
+    
     class Meta:
         model = Vehicle
-        fields = ['id', 'plate_number', 'model', 'capacity_kg', 'status', 'created_at', 'updated_at']
+        fields = ['id', 'plate_number', 'model', 'capacity_kg', 'status', 
+                 'driver', 'driver_name', 'driver_email', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class VehicleCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating vehicles."""
+    
+    class Meta:
+        model = Vehicle
+        fields = ['plate_number', 'model', 'capacity_kg', 'status']
+    
+    def validate_capacity_kg(self, value):
+        """Validate vehicle capacity."""
+        if value <= 0:
+            raise serializers.ValidationError("Capacity must be greater than 0.")
+        if value > 5000:  # Maximum reasonable capacity
+            raise serializers.ValidationError("Capacity cannot exceed 5000 kg.")
+        return value
+    
+    def validate_plate_number(self, value):
+        """Validate plate number format."""
+        if len(value.strip()) < 3:
+            raise serializers.ValidationError("Plate number is too short.")
+        return value.strip().upper()
+
+
+class VehicleDriverAssignmentSerializer(serializers.Serializer):
+    """Serializer for assigning/unassigning driver to vehicle."""
+    
+    vehicle_id = serializers.IntegerField()
+    driver_id = serializers.IntegerField(required=False, allow_null=True)
+    
+    def validate_vehicle_id(self, value):
+        """Validate vehicle exists."""
+        try:
+            vehicle = Vehicle.objects.get(id=value)
+        except Vehicle.DoesNotExist:
+            raise serializers.ValidationError("Vehicle not found.")
+        
+        if vehicle.status != 'ACTIVE':
+            raise serializers.ValidationError("Can only assign drivers to active vehicles.")
+        
+        return value
+    
+    def validate_driver_id(self, value):
+        """Validate driver exists and is available."""
+        if value is not None:
+            try:
+                driver = User.objects.get(id=value, role='DRIVER', is_active=True)
+            except User.DoesNotExist:
+                raise serializers.ValidationError("Driver not found or inactive.")
+            
+            # Check if driver is already assigned to another vehicle
+            try:
+                current_vehicle = Vehicle.objects.get(driver=driver)
+                raise serializers.ValidationError(
+                    f"Driver is already assigned to vehicle {current_vehicle.plate_number}."
+                )
+            except Vehicle.DoesNotExist:
+                # Driver is not assigned to any vehicle, which is good
+                pass
+        
+        return value
 
 
 class DriverAssignmentSerializer(serializers.ModelSerializer):

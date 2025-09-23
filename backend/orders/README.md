@@ -189,7 +189,226 @@ GET /api/orders/?status=PENDING&page=1&page_size=20
 
 ---
 
-## 2. Driver Assignment
+## 2. Vehicle Management
+
+### Create Vehicle
+
+**Endpoint:** `POST /api/vehicles/create/`
+
+**Description:** Create a new vehicle for the delivery fleet. Only dispatchers and admins can create vehicles.
+
+**Permissions:** Dispatcher or Admin role required
+
+**Request Body:**
+```json
+{
+  "plate_number": "KCA-123A",
+  "model": "Toyota Hiace",
+  "capacity_kg": 750.0,
+  "status": "ACTIVE"
+}
+```
+
+**Field Validations:**
+- `plate_number`: Required, minimum 3 characters, automatically converted to uppercase
+- `model`: Required, vehicle model/make
+- `capacity_kg`: Required, must be > 0 and ≤ 5000
+- `status`: Optional, defaults to "ACTIVE" (ACTIVE, IN_MAINTENANCE, RETIRED)
+
+**Success Response (201 Created):**
+```json
+{
+  "message": "Vehicle created successfully",
+  "vehicle": {
+    "id": 1,
+    "plate_number": "KCA-123A",
+    "model": "Toyota Hiace",
+    "capacity_kg": 750.0,
+    "status": "ACTIVE",
+    "driver": null,
+    "driver_name": null,
+    "driver_email": null,
+    "created_at": "2024-01-10T10:00:00Z",
+    "updated_at": "2024-01-10T10:00:00Z"
+  }
+}
+```
+
+---
+
+### List Vehicles
+
+**Endpoint:** `GET /api/vehicles/`
+
+**Description:** Retrieve all vehicles with pagination support.
+
+**Permissions:** Authenticated users
+
+**Query Parameters:**
+- `status`: Filter by vehicle status (ACTIVE, IN_MAINTENANCE, RETIRED)
+- `available_only`: Set to "true" to show only unassigned active vehicles
+- `page`: Page number for pagination
+- `page_size`: Number of results per page (max 100)
+
+**Example Request:**
+```
+GET /api/vehicles/?status=ACTIVE&available_only=true&page=1
+```
+
+**Success Response (200 OK):**
+```json
+{
+  "count": 15,
+  "next": "http://localhost:8000/api/vehicles/?page=2",
+  "previous": null,
+  "results": [
+    {
+      "id": 1,
+      "plate_number": "KCA-123A",
+      "model": "Toyota Hiace",
+      "capacity_kg": 750.0,
+      "status": "ACTIVE",
+      "driver": 2,
+      "driver_name": "john_driver",
+      "driver_email": "driver@example.com",
+      "created_at": "2024-01-10T10:00:00Z",
+      "updated_at": "2024-01-10T10:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+### Get Vehicle Details
+
+**Endpoint:** `GET /api/vehicles/{vehicle_id}/`
+
+**Description:** Retrieve detailed information about a specific vehicle.
+
+**Permissions:** Authenticated users
+
+**Success Response (200 OK):**
+```json
+{
+  "vehicle": {
+    "id": 1,
+    "plate_number": "KCA-123A",
+    "model": "Toyota Hiace",
+    "capacity_kg": 750.0,
+    "status": "ACTIVE",
+    "driver": 2,
+    "driver_name": "john_driver",
+    "driver_email": "driver@example.com",
+    "created_at": "2024-01-10T10:00:00Z",
+    "updated_at": "2024-01-10T10:00:00Z"
+  }
+}
+```
+
+**Error Responses:**
+- `404 Not Found`: Vehicle not found
+
+---
+
+### Update Vehicle
+
+**Endpoint:** `PATCH /api/vehicles/{vehicle_id}/update/`
+
+**Description:** Update vehicle information. Only dispatchers and admins can update vehicles.
+
+**Permissions:** Dispatcher or Admin role required
+
+**Request Body:**
+```json
+{
+  "status": "IN_MAINTENANCE",
+  "capacity_kg": 800.0
+}
+```
+
+**Success Response (200 OK):**
+```json
+{
+  "message": "Vehicle updated successfully",
+  "vehicle": {
+    "id": 1,
+    "plate_number": "KCA-123A",
+    "model": "Toyota Hiace",
+    "capacity_kg": 800.0,
+    "status": "IN_MAINTENANCE",
+    "driver": 2,
+    "driver_name": "john_driver",
+    "driver_email": "driver@example.com",
+    "created_at": "2024-01-10T10:00:00Z",
+    "updated_at": "2024-01-10T12:00:00Z"
+  }
+}
+```
+
+---
+
+### Assign Driver to Vehicle
+
+**Endpoint:** `POST /api/vehicles/assign-driver/`
+
+**Description:** Assign or unassign a driver to a specific vehicle. Only dispatchers and admins can manage driver-vehicle assignments.
+
+**Permissions:** Dispatcher or Admin role required
+
+**Request Body (Assign Driver):**
+```json
+{
+  "vehicle_id": 1,
+  "driver_id": 2
+}
+```
+
+**Request Body (Unassign Driver):**
+```json
+{
+  "vehicle_id": 1,
+  "driver_id": null
+}
+```
+
+**Field Descriptions:**
+- `vehicle_id`: Required, must be an active vehicle
+- `driver_id`: Driver to assign, or null to unassign current driver
+
+**Success Response (200 OK):**
+```json
+{
+  "message": "Driver john_driver assigned to vehicle KCA-123A",
+  "vehicle": {
+    "id": 1,
+    "plate_number": "KCA-123A",
+    "model": "Toyota Hiace",
+    "capacity_kg": 750.0,
+    "status": "ACTIVE",
+    "driver": 2,
+    "driver_name": "john_driver",
+    "driver_email": "driver@example.com",
+    "created_at": "2024-01-10T10:00:00Z",
+    "updated_at": "2024-01-10T12:00:00Z"
+  }
+}
+```
+
+**Assignment Logic:**
+1. If driver is already assigned to another vehicle, they are automatically reassigned
+2. Only one driver can be assigned to a vehicle at a time
+3. Only active vehicles can have drivers assigned
+4. Only active drivers with DRIVER role can be assigned
+
+**Error Responses:**
+- `400 Bad Request`: Vehicle not active, driver already assigned, validation errors
+- `403 Forbidden`: Insufficient permissions
+- `404 Not Found`: Vehicle or driver not found
+
+---
+
+## 3. Driver Assignment
 
 ### Assign Driver to Order
 
@@ -252,7 +471,7 @@ GET /api/orders/?status=PENDING&page=1&page_size=20
 
 ---
 
-## 3. Status Management
+## 4. Status Management
 
 ### Update Order Status
 
@@ -304,7 +523,7 @@ CANCELLED → (final state)
 
 ---
 
-## 4. Real-time Tracking
+## 5. Real-time Tracking
 
 ### Add Tracking Log
 
@@ -414,12 +633,12 @@ CANCELLED → (final state)
 
 ## User Roles & Permissions
 
-| Role | Create Order | View Orders | Assign Driver | Update Status | Add Tracking | View Tracking |
-|------|--------------|-------------|---------------|---------------|--------------|---------------|
-| **CUSTOMER** | ✅ Own | ✅ Own | ❌ | ❌ | ❌ | ✅ Own |
-| **DRIVER** | ❌ | ✅ Assigned | ❌ | ✅ Assigned | ✅ Own | ✅ Own |
-| **DISPATCHER** | ❌ | ✅ All | ✅ All | ✅ All | ✅ All | ✅ All |
-| **ADMIN** | ❌ | ✅ All | ✅ All | ✅ All | ✅ All | ✅ All |
+| Role | Create Order | View Orders | Create Vehicle | Assign Driver to Vehicle | Assign Driver to Order | Update Status | Add Tracking | View Tracking |
+|------|--------------|-------------|----------------|--------------------------|------------------------|---------------|--------------|---------------|
+| **CUSTOMER** | ✅ Own | ✅ Own | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ Own |
+| **DRIVER** | ❌ | ✅ Assigned | ❌ | ❌ | ❌ | ✅ Assigned | ✅ Own | ✅ Own |
+| **DISPATCHER** | ❌ | ✅ All | ✅ All | ✅ All | ✅ All | ✅ All | ✅ All | ✅ All |
+| **ADMIN** | ❌ | ✅ All | ✅ All | ✅ All | ✅ All | ✅ All | ✅ All | ✅ All |
 
 ---
 
@@ -474,6 +693,39 @@ curl -X POST http://localhost:8000/api/tracking/ \
     "longitude": 36.8219,
     "speed": 45.5
   }'
+```
+
+### Creating a Vehicle
+
+```bash
+curl -X POST http://localhost:8000/api/vehicles/create/ \
+  -H "Authorization: Bearer <dispatcher_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "plate_number": "KCA-123A",
+    "model": "Toyota Hiace",
+    "capacity_kg": 750.0,
+    "status": "ACTIVE"
+  }'
+```
+
+### Assigning Driver to Vehicle
+
+```bash
+curl -X POST http://localhost:8000/api/vehicles/assign-driver/ \
+  -H "Authorization: Bearer <dispatcher_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "vehicle_id": 1,
+    "driver_id": 2
+  }'
+```
+
+### Listing Available Vehicles
+
+```bash
+curl -X GET "http://localhost:8000/api/vehicles/?available_only=true&status=ACTIVE" \
+  -H "Authorization: Bearer <token>"
 ```
 
 ---
