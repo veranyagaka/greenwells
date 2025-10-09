@@ -10,12 +10,18 @@ from geopy.distance import geodesic
 import logging
 import math
 
-from .models import Vehicle, DriverAssignment, Order, Delivery, TrackingLog
+from .models import (
+    Vehicle, DriverAssignment, Order, Delivery, TrackingLog,
+    Cylinder, CylinderHistory, CylinderScan
+)
 from .serializers import (
     VehicleSerializer, VehicleCreateSerializer, VehicleDriverAssignmentSerializer,
     DriverAssignmentSerializer, OrderCreateSerializer,
     OrderSerializer, OrderStatusUpdateSerializer, DeliverySerializer,
-    DeliveryAssignmentSerializer, TrackingLogSerializer
+    DeliveryAssignmentSerializer, TrackingLogSerializer,
+    CylinderSerializer, CylinderCreateSerializer, CylinderScanSerializer,
+    CylinderHistorySerializer, CylinderScanLogSerializer,
+    CylinderAssignmentSerializer, CylinderStatusUpdateSerializer
 )
 
 User = get_user_model()
@@ -712,4 +718,644 @@ def assign_driver_to_vehicle(request):
         logger.error(f"Driver-vehicle assignment error: {str(e)}")
         return Response({
             'error': 'Internal server error during driver-vehicle assignment'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ============= CYLINDER MANAGEMENT VIEWS =============
+
+@api_view(['POST'])
+@permission_classes([IsDispatcherOrAdmin])
+def register_cylinder(request):
+    """
+    Register a new cylinder with QR/RFID codes.
+    
+    Only dispatchers and admins can register cylinders.
+    Automatically generates secure QR codes, RFID tags, and authentication hashes.
+    """
+    try:
+        serializer = CylinderCreateSerializer(data=request.data)
+        
+        if serializer.is_valid():
+            with transaction.atomic():
+                # Create cylinder (codes generated automatically in model)
+                cylinder = serializer.save()
+                
+                # Create registration history entry
+                CylinderHistory.objects.create(
+                    cylinder=cylinder,
+                    event_type='REGISTERED',
+                    performed_by=request.user,
+                    notes=f"Cylinder registered by {request.user.username}"
+                )
+                
+                logger.info(f"Cylinder {cylinder.serial_number} registered by {request.user.username}")
+                
+                # Return cylinder details including generated codes
+                cylinder_serializer = CylinderSerializer(cylinder)
+                
+                return Response({
+                    'message': 'Cylinder registered successfully',
+                    'cylinder': cylinder_serializer.data,
+                    'security': {
+                        'qr_code': cylinder.qr_code,
+                        'rfid_tag': cylinder.rfid_tag,
+                        'auth_token': cylinder.generate_auth_token()
+                    }
+                }, status=status.HTTP_201_CREATED)
+        
+        return Response({
+            'error': 'Cylinder registration failed',
+            'details': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+        
+    except Exception as e:
+        logger.error(f"Cylinder registration error: {str(e)}")
+        return Response({
+            'error': 'Internal server error during cylinder registration'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def scan_cylinder(request):
+    """
+    Scan and verify cylinder authenticity using QR code or RFID tag.
+    
+    Features:
+    - Real-time authenticity verification
+    - Tamper detection
+    - Scan history logging
+    - Suspicious activity detection
+    - GPS location tracking
+    
+    Available to all authenticated users.
+    """
+    try:
+        serializer = CylinderScanSerializer(data=request.data)
+        
+        if not serializer.is_valid():
+            return Response({
+                'error': 'Invalid scan data',
+                'details': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        validated_data = serializer.validated_data
+        code = validated_data['code']
+        scan_type = validated_data['scan_type']
+        
+        # Find cylinder by code
+        try:
+            if scan_type == 'QR':
+                cylinder = Cylinder.objects.get(qr_code=code)
+            elif scan_type == 'RFID':
+                cylinder = Cylinder.objects.get(rfid_tag=code)
+            else:
+                # Manual entry - try both
+                cylinder = Cylinder.objects.filter(
+                    models.Q(qr_code=code) | models.Q(rfid_tag=code)
+                ).first()
+                
+                if not cylinder:
+                    return Response({
+                        'error': 'Cylinder not found',
+                        'scan_result': 'FAILED',
+                        'verified': False
+                    }, status=status.HTTP_404_NOT_FOUND)
+        
+        except Cylinder.DoesNotExist:
+            # Log failed scan attempt
+            logger.warning(f"Failed scan attempt by {request.user.username}: code {code}")
+            
+            return Response({
+                'error': 'Cylinder not found',
+                'scan_result': 'FAILED',
+                'verified': False,
+                'message': 'Invalid QR/RFID code'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Verify authenticity
+        is_valid, message = cylinder.verify_authenticity(code, scan_type.lower())
+        
+        # Determine scan result
+        if is_valid:
+            scan_result = 'SUCCESS'
+        elif cylinder.is_tampered:
+            scan_result = 'TAMPERED'
+        elif cylinder.status == 'STOLEN':
+            scan_result = 'STOLEN'
+        elif cylinder.expiry_date < timezone.now().date():
+            scan_result = 'EXPIRED'
+        else:
+            scan_result = 'FAILED'
+        
+        # Detect suspicious activity
+        is_suspicious = False
+        suspicious_reason = ''
+        
+        # Check for rapid repeated scans (potential cloning attempt)
+        recent_scans = CylinderScan.objects.filter(
+            cylinder=cylinder,
+            scan_timestamp__gte=timezone.now() - timezone.timedelta(minutes=5)
+        ).count()
+        
+        if recent_scans > 5:
+            is_suspicious = True
+            suspicious_reason = 'Multiple rapid scans detected - possible cloning attempt'
+        
+        # Check for scans from different locations in short time
+        if validated_data.get('location_lat') and validated_data.get('location_lng'):
+            last_scan = CylinderScan.objects.filter(
+                cylinder=cylinder,
+                scan_location_lat__isnull=False
+            ).first()
+            
+            if last_scan:
+                time_diff = (timezone.now() - last_scan.scan_timestamp).total_seconds()
+                if time_diff < 300:  # 5 minutes
+                    # Calculate distance (simplified)
+                    lat_diff = abs(validated_data['location_lat'] - last_scan.scan_location_lat)
+                    lng_diff = abs(validated_data['location_lng'] - last_scan.scan_location_lng)
+                    
+                    # If moved more than ~50km in 5 minutes (very rough estimate)
+                    if lat_diff > 0.5 or lng_diff > 0.5:
+                        is_suspicious = True
+                        suspicious_reason += ' Impossible location change detected.'
+        
+        with transaction.atomic():
+            # Create scan log
+            scan_log = CylinderScan.objects.create(
+                cylinder=cylinder,
+                scan_type=scan_type,
+                scan_result=scan_result,
+                scanned_by=request.user,
+                scanner_role=request.user.role,
+                scanned_code=code,
+                scan_location_lat=validated_data.get('location_lat'),
+                scan_location_lng=validated_data.get('location_lng'),
+                scan_location_address=validated_data.get('location_address', ''),
+                verification_message=message,
+                auth_token=cylinder.generate_auth_token() if is_valid else '',
+                is_suspicious=is_suspicious,
+                suspicious_reason=suspicious_reason,
+                ip_address=request.META.get('REMOTE_ADDR'),
+                user_agent=request.META.get('HTTP_USER_AGENT', ''),
+                related_order_id=validated_data.get('order_id')
+            )
+            
+            # Update cylinder last scan info
+            cylinder.last_scanned_at = timezone.now()
+            cylinder.last_scanned_by = request.user
+            cylinder.total_scans += 1
+            
+            if validated_data.get('location_address'):
+                cylinder.last_known_location = validated_data['location_address']
+            
+            cylinder.save()
+            
+            # Create history entry
+            CylinderHistory.objects.create(
+                cylinder=cylinder,
+                event_type='SCANNED',
+                performed_by=request.user,
+                location=validated_data.get('location_address', ''),
+                notes=f"{scan_type} scan - {message}",
+                verification_data={
+                    'scan_result': scan_result,
+                    'is_suspicious': is_suspicious,
+                    'latitude': validated_data.get('location_lat'),
+                    'longitude': validated_data.get('location_lng')
+                }
+            )
+            
+            logger.info(
+                f"Cylinder {cylinder.serial_number} scanned by {request.user.username} - "
+                f"Result: {scan_result}, Suspicious: {is_suspicious}"
+            )
+        
+        # Build response
+        response_data = {
+            'verified': is_valid,
+            'scan_result': scan_result,
+            'message': message,
+            'cylinder': {
+                'serial_number': cylinder.serial_number,
+                'cylinder_type': cylinder.cylinder_type,
+                'capacity_kg': cylinder.capacity_kg,
+                'status': cylinder.status,
+                'manufacturer': cylinder.manufacturer,
+                'expiry_date': cylinder.expiry_date.isoformat(),
+                'total_fills': cylinder.total_fills,
+                'last_inspection_date': cylinder.last_inspection_date.isoformat() if cylinder.last_inspection_date else None,
+            },
+            'security': {
+                'is_authentic': cylinder.is_authentic,
+                'is_tampered': cylinder.is_tampered,
+                'is_expired': cylinder.expiry_date < timezone.now().date(),
+                'auth_token': cylinder.generate_auth_token() if is_valid else None
+            }
+        }
+        
+        if is_suspicious:
+            response_data['warning'] = {
+                'is_suspicious': True,
+                'reason': suspicious_reason,
+                'action': 'Report to security team immediately'
+            }
+        
+        if cylinder.current_customer:
+            response_data['customer'] = {
+                'name': cylinder.current_customer.username,
+                'email': cylinder.current_customer.email,
+            }
+        
+        if cylinder.current_order:
+            response_data['order'] = {
+                'id': cylinder.current_order.id,
+                'status': cylinder.current_order.status,
+            }
+        
+        status_code = status.HTTP_200_OK if is_valid else status.HTTP_200_OK
+        
+        return Response(response_data, status=status_code)
+        
+    except Exception as e:
+        logger.error(f"Cylinder scan error: {str(e)}")
+        return Response({
+            'error': 'Internal server error during cylinder scan'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_cylinder_history(request, cylinder_id):
+    """
+    Get complete history for a cylinder.
+    
+    Shows all events including:
+    - Registration
+    - Fills and refills
+    - Customer assignments
+    - Deliveries
+    - Scans
+    - Inspections
+    - Status changes
+    
+    Permissions:
+    - Customers can view history of their cylinders
+    - Drivers can view cylinders in their deliveries
+    - Dispatchers and admins can view all
+    """
+    try:
+        cylinder = Cylinder.objects.get(id=cylinder_id)
+        
+        # Check permissions
+        user = request.user
+        if user.role == 'CUSTOMER':
+            if cylinder.current_customer != user:
+                # Check if customer ever had this cylinder
+                has_history = CylinderHistory.objects.filter(
+                    cylinder=cylinder,
+                    customer=user
+                ).exists()
+                
+                if not has_history:
+                    return Response({
+                        'error': 'Permission denied'
+                    }, status=status.HTTP_403_FORBIDDEN)
+        elif user.role == 'DRIVER':
+            # Check if driver has delivered this cylinder
+            has_delivered = CylinderHistory.objects.filter(
+                cylinder=cylinder,
+                driver=user
+            ).exists()
+            
+            if not has_delivered:
+                return Response({
+                    'error': 'Permission denied'
+                }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Get history
+        history = CylinderHistory.objects.filter(cylinder=cylinder)
+        
+        # Apply filters
+        event_type = request.GET.get('event_type')
+        if event_type:
+            history = history.filter(event_type=event_type)
+        
+        start_date = request.GET.get('start_date')
+        if start_date:
+            history = history.filter(event_date__gte=start_date)
+        
+        end_date = request.GET.get('end_date')
+        if end_date:
+            history = history.filter(event_date__lte=end_date)
+        
+        # Pagination
+        paginator = OrderPagination()
+        page = paginator.paginate_queryset(history, request)
+        
+        if page is not None:
+            serializer = CylinderHistorySerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
+        serializer = CylinderHistorySerializer(history, many=True)
+        cylinder_serializer = CylinderSerializer(cylinder)
+        
+        return Response({
+            'cylinder': cylinder_serializer.data,
+            'history': serializer.data,
+            'total_events': history.count()
+        }, status=status.HTTP_200_OK)
+        
+    except Cylinder.DoesNotExist:
+        return Response({
+            'error': 'Cylinder not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        logger.error(f"Get cylinder history error: {str(e)}")
+        return Response({
+            'error': 'Internal server error while fetching cylinder history'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsDispatcherOrAdmin])
+def assign_cylinder_to_order(request):
+    """
+    Assign a cylinder to an order/customer.
+    
+    Creates proper tracking in cylinder history.
+    Only dispatchers and admins can assign cylinders.
+    """
+    try:
+        serializer = CylinderAssignmentSerializer(data=request.data)
+        
+        if not serializer.is_valid():
+            return Response({
+                'error': 'Invalid assignment data',
+                'details': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        validated_data = serializer.validated_data
+        cylinder_id = validated_data['cylinder_id']
+        order_id = validated_data.get('order_id')
+        customer_id = validated_data.get('customer_id')
+        notes = validated_data.get('notes', '')
+        
+        with transaction.atomic():
+            cylinder = Cylinder.objects.select_for_update().get(id=cylinder_id)
+            
+            # Update cylinder
+            previous_customer = cylinder.current_customer
+            previous_order = cylinder.current_order
+            
+            if order_id:
+                order = Order.objects.get(id=order_id)
+                cylinder.current_order = order
+                cylinder.current_customer = order.customer
+                cylinder.status = 'IN_DELIVERY'
+                
+                # Create history entry
+                CylinderHistory.objects.create(
+                    cylinder=cylinder,
+                    event_type='DELIVERED',
+                    customer=order.customer,
+                    order=order,
+                    performed_by=request.user,
+                    previous_status=cylinder.status,
+                    new_status='IN_DELIVERY',
+                    notes=notes or f"Assigned to order #{order.id}"
+                )
+                
+            elif customer_id:
+                customer = User.objects.get(id=customer_id)
+                cylinder.current_customer = customer
+                cylinder.current_order = None
+                
+                # Create history entry
+                CylinderHistory.objects.create(
+                    cylinder=cylinder,
+                    event_type='CUSTOMER_ASSIGNED',
+                    customer=customer,
+                    performed_by=request.user,
+                    notes=notes or f"Assigned to customer {customer.username}"
+                )
+            
+            cylinder.save()
+            
+            logger.info(
+                f"Cylinder {cylinder.serial_number} assigned by {request.user.username}"
+            )
+            
+            cylinder_serializer = CylinderSerializer(cylinder)
+            
+            return Response({
+                'message': 'Cylinder assigned successfully',
+                'cylinder': cylinder_serializer.data
+            }, status=status.HTTP_200_OK)
+        
+    except Cylinder.DoesNotExist:
+        return Response({
+            'error': 'Cylinder not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Order.DoesNotExist:
+        return Response({
+            'error': 'Order not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except User.DoesNotExist:
+        return Response({
+            'error': 'Customer not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        logger.error(f"Cylinder assignment error: {str(e)}")
+        return Response({
+            'error': 'Internal server error during cylinder assignment'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def list_cylinders(request):
+    """
+    List cylinders based on user role and filters.
+    
+    - Customers see only their cylinders
+    - Drivers see cylinders in their deliveries
+    - Dispatchers and admins see all cylinders
+    """
+    try:
+        user = request.user
+        
+        # Filter cylinders based on user role
+        if user.role == 'CUSTOMER':
+            cylinders = Cylinder.objects.filter(current_customer=user)
+        elif user.role == 'DRIVER':
+            # Get cylinders from driver's current deliveries
+            delivery_orders = Order.objects.filter(delivery__driver=user)
+            cylinders = Cylinder.objects.filter(current_order__in=delivery_orders)
+        else:  # DISPATCHER or ADMIN
+            cylinders = Cylinder.objects.all()
+        
+        # Apply filters
+        status_filter = request.GET.get('status')
+        if status_filter:
+            cylinders = cylinders.filter(status=status_filter)
+        
+        cylinder_type = request.GET.get('cylinder_type')
+        if cylinder_type:
+            cylinders = cylinders.filter(cylinder_type=cylinder_type)
+        
+        is_tampered = request.GET.get('is_tampered')
+        if is_tampered and is_tampered.lower() == 'true':
+            cylinders = cylinders.filter(is_tampered=True)
+        
+        is_expired = request.GET.get('is_expired')
+        if is_expired and is_expired.lower() == 'true':
+            cylinders = cylinders.filter(expiry_date__lt=timezone.now().date())
+        
+        # Pagination
+        paginator = OrderPagination()
+        page = paginator.paginate_queryset(cylinders, request)
+        
+        if page is not None:
+            serializer = CylinderSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
+        serializer = CylinderSerializer(cylinders, many=True)
+        return Response({
+            'cylinders': serializer.data
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"List cylinders error: {str(e)}")
+        return Response({
+            'error': 'Internal server error while fetching cylinders'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_cylinder(request, cylinder_id):
+    """Get specific cylinder details with full history."""
+    try:
+        cylinder = Cylinder.objects.get(id=cylinder_id)
+        
+        # Check permissions
+        user = request.user
+        if user.role == 'CUSTOMER' and cylinder.current_customer != user:
+            return Response({
+                'error': 'Permission denied'
+            }, status=status.HTTP_403_FORBIDDEN)
+        elif user.role == 'DRIVER':
+            # Check if in driver's deliveries
+            has_delivery = Order.objects.filter(
+                delivery__driver=user,
+                cylinders=cylinder
+            ).exists()
+            
+            if not has_delivery:
+                return Response({
+                    'error': 'Permission denied'
+                }, status=status.HTTP_403_FORBIDDEN)
+        
+        serializer = CylinderSerializer(cylinder)
+        
+        # Include recent history
+        recent_history = CylinderHistory.objects.filter(
+            cylinder=cylinder
+        )[:10]
+        history_serializer = CylinderHistorySerializer(recent_history, many=True)
+        
+        # Include recent scans
+        recent_scans = CylinderScan.objects.filter(
+            cylinder=cylinder
+        )[:5]
+        scans_serializer = CylinderScanLogSerializer(recent_scans, many=True)
+        
+        return Response({
+            'cylinder': serializer.data,
+            'recent_history': history_serializer.data,
+            'recent_scans': scans_serializer.data
+        }, status=status.HTTP_200_OK)
+        
+    except Cylinder.DoesNotExist:
+        return Response({
+            'error': 'Cylinder not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        logger.error(f"Get cylinder error: {str(e)}")
+        return Response({
+            'error': 'Internal server error while fetching cylinder'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsDispatcherOrAdmin])
+def update_cylinder_status(request, cylinder_id):
+    """
+    Update cylinder status.
+    
+    Only dispatchers and admins can update cylinder status.
+    Creates history entry for audit trail.
+    """
+    try:
+        cylinder = Cylinder.objects.get(id=cylinder_id)
+        
+        serializer = CylinderStatusUpdateSerializer(
+            data=request.data,
+            context={'cylinder': cylinder}
+        )
+        
+        if serializer.is_valid():
+            with transaction.atomic():
+                validated_data = serializer.validated_data
+                new_status = validated_data['status']
+                old_status = cylinder.status
+                notes = validated_data.get('notes', '')
+                location = validated_data.get('location', '')
+                
+                # Update cylinder
+                cylinder.status = new_status
+                
+                if location:
+                    cylinder.last_known_location = location
+                
+                cylinder.save()
+                
+                # Create history entry
+                CylinderHistory.objects.create(
+                    cylinder=cylinder,
+                    event_type='STATUS_CHANGE',
+                    performed_by=request.user,
+                    previous_status=old_status,
+                    new_status=new_status,
+                    location=location,
+                    notes=notes or f"Status changed from {old_status} to {new_status}"
+                )
+                
+                logger.info(
+                    f"Cylinder {cylinder.serial_number} status updated from "
+                    f"{old_status} to {new_status} by {request.user.username}"
+                )
+                
+                cylinder_serializer = CylinderSerializer(cylinder)
+                
+                return Response({
+                    'message': 'Cylinder status updated successfully',
+                    'cylinder': cylinder_serializer.data
+                }, status=status.HTTP_200_OK)
+        
+        return Response({
+            'error': 'Status update failed',
+            'details': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+        
+    except Cylinder.DoesNotExist:
+        return Response({
+            'error': 'Cylinder not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        logger.error(f"Cylinder status update error: {str(e)}")
+        return Response({
+            'error': 'Internal server error during cylinder status update'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
