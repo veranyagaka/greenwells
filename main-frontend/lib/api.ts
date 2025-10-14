@@ -246,3 +246,102 @@ export const validatePhone = (phone: string): boolean => {
 export const validateCoordinates = (lat: number, lng: number): boolean => {
   return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
 };
+
+// ============= CYLINDER API CALLS =============
+
+export const cylinderAPI = {
+  /**
+   * Register a new cylinder with QR/RFID codes
+   * Only dispatchers and admins can register cylinders
+   */
+  registerCylinder: async (data: any) => {
+    return apiRequest<any>('/cylinders/register/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Scan and verify cylinder authenticity using QR or RFID code
+   * Available to all authenticated users
+   */
+  scanCylinder: async (data: any) => {
+    return apiRequest<any>('/cylinders/scan/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Get list of cylinders (filtered by user role)
+   */
+  getCylinders: async (params?: {
+    status?: string;
+    cylinderType?: string;
+    isTampered?: boolean;
+    isExpired?: boolean;
+  }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.cylinderType) queryParams.append('cylinder_type', params.cylinderType);
+    if (params?.isTampered !== undefined) queryParams.append('is_tampered', params.isTampered.toString());
+    if (params?.isExpired !== undefined) queryParams.append('is_expired', params.isExpired.toString());
+    
+    const query = queryParams.toString();
+    return apiRequest<{ cylinders: any[] }>(`/cylinders/${query ? `?${query}` : ''}`);
+  },
+
+  /**
+   * Get specific cylinder details with history
+   */
+  getCylinder: async (cylinderId: string) => {
+    return apiRequest<{
+      cylinder: any;
+      recent_history: any[];
+      recent_scans: any[];
+    }>(`/cylinders/${cylinderId}/`);
+  },
+
+  /**
+   * Get complete history for a cylinder
+   */
+  getCylinderHistory: async (cylinderId: string, params?: {
+    eventType?: string;
+    startDate?: string;
+    endDate?: string;
+  }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.eventType) queryParams.append('event_type', params.eventType);
+    if (params?.startDate) queryParams.append('start_date', params.startDate);
+    if (params?.endDate) queryParams.append('end_date', params.endDate);
+    
+    const query = queryParams.toString();
+    return apiRequest<{
+      cylinder: any;
+      history: any[];
+      total_events: number;
+    }>(`/cylinders/${cylinderId}/history/${query ? `?${query}` : ''}`);
+  },
+
+  /**
+   * Assign cylinder to order or customer
+   * Only dispatchers and admins
+   */
+  assignCylinder: async (data: any) => {
+    return apiRequest<{ cylinder: any }>('/cylinders/assign/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Update cylinder status
+   * Only dispatchers and admins
+   */
+  updateCylinderStatus: async (cylinderId: string, data: any) => {
+    return apiRequest<{ cylinder: any }>(`/cylinders/${cylinderId}/status/`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+};

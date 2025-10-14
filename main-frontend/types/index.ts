@@ -36,6 +36,191 @@ export interface Order {
 export type OrderStatus = 'PENDING' | 'ASSIGNED' | 'ON_ROUTE' | 'DELIVERED' | 'CANCELLED';
 export type OrderPriority = 'HIGH' | 'MEDIUM' | 'LOW';
 
+// ============= CYLINDER TYPES =============
+
+export type CylinderStatus = 
+  | 'ACTIVE' 
+  | 'FILLED' 
+  | 'IN_DELIVERY' 
+  | 'EMPTY' 
+  | 'MAINTENANCE' 
+  | 'RETIRED' 
+  | 'STOLEN';
+
+export type CylinderType = '6KG' | '13KG' | '26KG' | '50KG';
+
+export type ScanType = 'QR' | 'RFID' | 'MANUAL';
+
+export type ScanResult = 
+  | 'SUCCESS' 
+  | 'FAILED' 
+  | 'SUSPICIOUS' 
+  | 'TAMPERED' 
+  | 'EXPIRED' 
+  | 'STOLEN';
+
+export type CylinderEventType = 
+  | 'REGISTERED'
+  | 'FILLED'
+  | 'DELIVERED'
+  | 'RETURNED'
+  | 'SCANNED'
+  | 'INSPECTED'
+  | 'MAINTENANCE'
+  | 'STATUS_CHANGE'
+  | 'CUSTOMER_ASSIGNED'
+  | 'CUSTOMER_UNASSIGNED'
+  | 'TAMPER_DETECTED'
+  | 'LOCATION_UPDATE';
+
+export interface Cylinder {
+  id: string;
+  serialNumber: string;
+  qrCode: string;
+  rfidTag: string;
+  cylinderType: CylinderType;
+  capacityKg: number;
+  manufacturer: string;
+  manufacturingDate: string;
+  expiryDate: string;
+  status: CylinderStatus;
+  currentCustomer?: string;
+  customerName?: string;
+  customerEmail?: string;
+  currentOrder?: string;
+  orderId?: number;
+  lastKnownLocation?: string;
+  lastScannedAt?: string;
+  lastInspectionDate?: string;
+  nextInspectionDate?: string;
+  totalFills: number;
+  totalScans: number;
+  isAuthentic: boolean;
+  isTampered: boolean;
+  tamperNotes?: string;
+  isExpired: boolean;
+  verificationStatus: 'VERIFIED' | 'TAMPERED' | 'NON_AUTHENTIC' | 'EXPIRED' | 'STOLEN';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CylinderScanRequest {
+  code: string;
+  scanType: ScanType;
+  locationLat?: number;
+  locationLng?: number;
+  locationAddress?: string;
+  orderId?: number;
+}
+
+export interface CylinderScanResponse {
+  verified: boolean;
+  scanResult: ScanResult;
+  message: string;
+  cylinder: {
+    serialNumber: string;
+    cylinderType: CylinderType;
+    capacityKg: number;
+    status: CylinderStatus;
+    manufacturer: string;
+    expiryDate: string;
+    totalFills: number;
+    lastInspectionDate?: string;
+  };
+  security: {
+    isAuthentic: boolean;
+    isTampered: boolean;
+    isExpired: boolean;
+    authToken?: string;
+  };
+  warning?: {
+    isSuspicious: boolean;
+    reason: string;
+    action: string;
+  };
+  customer?: {
+    name: string;
+    email: string;
+  };
+  order?: {
+    id: number;
+    status: OrderStatus;
+  };
+}
+
+export interface CylinderHistory {
+  id: number;
+  cylinder: string;
+  cylinderSerial: string;
+  eventType: CylinderEventType;
+  eventDate: string;
+  customer?: number;
+  customerName?: string;
+  driver?: number;
+  driverName?: string;
+  order?: number;
+  delivery?: number;
+  previousStatus?: string;
+  newStatus?: string;
+  location?: string;
+  notes?: string;
+  performedBy?: number;
+  performedByName?: string;
+  verificationData?: any;
+}
+
+export interface CylinderScanLog {
+  id: number;
+  cylinder: string;
+  cylinderSerial: string;
+  scanType: ScanType;
+  scanResult: ScanResult;
+  scannedBy?: number;
+  scannedByName?: string;
+  scannerRole?: string;
+  scanTimestamp: string;
+  scanLocationLat?: number;
+  scanLocationLng?: number;
+  scanLocationAddress?: string;
+  verificationMessage: string;
+  isSuspicious: boolean;
+  suspiciousReason?: string;
+  relatedOrder?: number;
+  relatedDelivery?: number;
+}
+
+export interface CylinderRegistrationRequest {
+  serialNumber: string;
+  cylinderType: CylinderType;
+  capacityKg: number;
+  manufacturer: string;
+  manufacturingDate: string;
+  expiryDate: string;
+}
+
+export interface CylinderRegistrationResponse {
+  message: string;
+  cylinder: Cylinder;
+  security: {
+    qrCode: string;
+    rfidTag: string;
+    authToken: string;
+  };
+}
+
+export interface CylinderAssignmentRequest {
+  cylinderId: string;
+  orderId?: number;
+  customerId?: number;
+  notes?: string;
+}
+
+export interface CylinderStatusUpdateRequest {
+  status: CylinderStatus;
+  notes?: string;
+  location?: string;
+}
+
 export interface Vehicle {
   id: string;
   number: string;

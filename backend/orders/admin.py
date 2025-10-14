@@ -1,5 +1,8 @@
 from django.contrib import admin
-from .models import Vehicle, DriverAssignment, Order, Delivery, TrackingLog
+from .models import (
+    Vehicle, DriverAssignment, Order, Delivery, TrackingLog,
+    Cylinder, CylinderHistory, CylinderScan
+)
 
 
 @admin.register(Vehicle)
@@ -48,3 +51,70 @@ class TrackingLogAdmin(admin.ModelAdmin):
     
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('delivery__order')
+
+
+@admin.register(Cylinder)
+class CylinderAdmin(admin.ModelAdmin):
+    list_display = [
+        'serial_number', 'qr_code', 'cylinder_type', 'status',
+        'current_customer', 'is_authentic', 'is_tampered', 'expiry_date'
+    ]
+    list_filter = ['status', 'cylinder_type', 'is_authentic', 'is_tampered', 'expiry_date']
+    search_fields = ['serial_number', 'qr_code', 'rfid_tag', 'manufacturer']
+    readonly_fields = ['id', 'qr_code', 'rfid_tag', 'auth_hash', 'secret_key', 'created_at', 'updated_at']
+    
+    fieldsets = (
+        ('Identification', {
+            'fields': ('id', 'serial_number', 'qr_code', 'rfid_tag')
+        }),
+        ('Cylinder Details', {
+            'fields': ('cylinder_type', 'capacity_kg', 'manufacturer', 'manufacturing_date', 'expiry_date')
+        }),
+        ('Status & Tracking', {
+            'fields': ('status', 'current_customer', 'current_order', 'last_known_location')
+        }),
+        ('Maintenance', {
+            'fields': ('last_inspection_date', 'next_inspection_date', 'total_fills', 'total_scans')
+        }),
+        ('Security', {
+            'fields': ('is_authentic', 'is_tampered', 'tamper_notes', 'auth_hash', 'secret_key')
+        }),
+        ('Timestamps', {
+            'fields': ('last_scanned_at', 'last_scanned_by', 'created_at', 'updated_at')
+        }),
+    )
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('current_customer', 'current_order')
+
+
+@admin.register(CylinderHistory)
+class CylinderHistoryAdmin(admin.ModelAdmin):
+    list_display = [
+        'id', 'cylinder', 'event_type', 'event_date',
+        'customer', 'driver', 'performed_by'
+    ]
+    list_filter = ['event_type', 'event_date']
+    search_fields = ['cylinder__serial_number', 'customer__username', 'notes']
+    readonly_fields = ['event_date']
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            'cylinder', 'customer', 'driver', 'order', 'delivery', 'performed_by'
+        )
+
+
+@admin.register(CylinderScan)
+class CylinderScanAdmin(admin.ModelAdmin):
+    list_display = [
+        'id', 'cylinder', 'scan_type', 'scan_result',
+        'scanned_by', 'scan_timestamp', 'is_suspicious'
+    ]
+    list_filter = ['scan_type', 'scan_result', 'is_suspicious', 'scan_timestamp']
+    search_fields = ['cylinder__serial_number', 'scanned_by__username', 'scanned_code']
+    readonly_fields = ['scan_timestamp']
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            'cylinder', 'scanned_by', 'related_order', 'related_delivery'
+        )
