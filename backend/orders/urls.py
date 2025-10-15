@@ -23,4 +23,13 @@ urlpatterns = [
     # Tracking
     path('tracking/', views.add_tracking_log, name='add_tracking_log'),
     path('tracking/<int:delivery_id>/', views.get_delivery_tracking, name='get_delivery_tracking'),
+    
+    # Cylinder management
+    path('cylinders/', views.list_cylinders, name='list_cylinders'),
+    path('cylinders/register/', views.register_cylinder, name='register_cylinder'),
+    path('cylinders/scan/', views.scan_cylinder, name='scan_cylinder'),
+    path('cylinders/<uuid:cylinder_id>/', views.get_cylinder, name='get_cylinder'),
+    path('cylinders/<uuid:cylinder_id>/status/', views.update_cylinder_status, name='update_cylinder_status'),
+    path('cylinders/<uuid:cylinder_id>/history/', views.get_cylinder_history, name='get_cylinder_history'),
+    path('cylinders/assign/', views.assign_cylinder_to_order, name='assign_cylinder_to_order'),
 ]
