@@ -4,6 +4,63 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000/ws';
 
+//added code to fetch drivers, driver location, order history in mock mode
+// Check if mock mode is enabled
+const isMockMode = process.env.NEXT_PUBLIC_MOCK_API === 'true';
+
+export type LatLng = { lat: number; lng: number };
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const MOCK = process.env.NEXT_PUBLIC_MOCK_API === 'true';
+
+function wait(ms = 300) { return new Promise(res => setTimeout(res, ms)); }
+
+const MOCK_DATA = {
+  driverLocation: { lat: -1.2841, lng: 36.8183 },
+  drivers: [
+    { id: 1, name: 'John', location: { lat: -1.2841, lng: 36.8183 }, status: 'enroute', speed: 42 },
+    { id: 2, name: 'Grace', location: { lat: -1.2860, lng: 36.8200 }, status: 'idle', speed: 0 }
+  ],
+  orders: [
+    { id: 1001, date: '2025-09-19', status: 'delivered', cylinders: 2, address: '12 Market Rd' },
+    { id: 1002, date: '2025-09-21', status: 'in_transit', cylinders: 1, address: '3 Church Ln' }
+  ]
+};
+
+export async function fetchDriverLocation(orderId?: number): Promise<LatLng> {
+  if (MOCK) {
+    await wait(250);
+    const jitter = (Math.random() - 0.5) * 0.0008;
+    return { lat: MOCK_DATA.driverLocation.lat + jitter, lng: MOCK_DATA.driverLocation.lng + jitter };
+  }
+  const res = await fetch(`${API_BASE}/deliveries/driver-location${orderId ? `?order=${orderId}` : ''}`);
+  if (!res.ok) throw new Error('Failed to fetch driver location');
+  return res.json();
+}
+
+export async function fetchDrivers(): Promise<any[]> {
+  if (MOCK) { await wait(200); return MOCK_DATA.drivers; }
+  const res = await fetch(`${API_BASE}/drivers`);
+  if (!res.ok) throw new Error('Failed to fetch drivers');
+  return res.json();
+}
+
+export async function fetchOrders(customerId?: number) {
+  if (MOCK) { await wait(200); return MOCK_DATA.orders; }
+  const res = await fetch(`${API_BASE}/orders${customerId ? `?customer=${customerId}` : ''}`);
+  if (!res.ok) throw new Error('Failed to fetch orders');
+  return res.json();
+}
+
+export async function postChatMessage(payload: { orderId?: number; sender: string; text: string }) {
+  if (MOCK) { await wait(150); return { ok: true, message: { id: Date.now(), ...payload, created_at: new Date().toISOString() } }; }
+  const res = await fetch(`${API_BASE}/messages`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error('Failed to send message');
+  return res.json();
+}
+
 // Auth token management
 export const getAuthToken = (): string | null => {
   if (typeof window === 'undefined') return null;
