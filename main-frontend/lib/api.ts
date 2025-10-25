@@ -105,25 +105,25 @@ export const apiRequest = async <T>(
 // Authentication API calls
 export const authAPI = {
   login: async (credentials: { email: string; password: string; role: string }) => {
-    return apiRequest<{ user: any; token: string }>('/auth/login', {
+    return apiRequest<{ user: any; tokens: any }>('/auth/login/', {
       method: 'POST',
       body: JSON.stringify(credentials),
     });
   },
 
   register: async (userData: { name: string; email: string; password: string; role: string }) => {
-    return apiRequest<{ user: any; token: string }>('/auth/register', {
+    return apiRequest<{ user: any; tokens: any }>('/auth/signup/', {
       method: 'POST',
       body: JSON.stringify(userData),
     });
   },
 
   logout: async () => {
-    return apiRequest('/auth/logout', { method: 'POST' });
+    return apiRequest('/auth/signout/', { method: 'POST' });
   },
 
   refreshToken: async () => {
-    return apiRequest<{ token: string }>('/auth/refresh', { method: 'POST' });
+    return apiRequest<{ tokens: any }>('/auth/refresh/', { method: 'POST' });
   },
 };
 

@@ -42,9 +42,11 @@ export default function HomePage() {
   };
 
   const handleLogin = (userData: User) => {
+    console.log('Login successful, user data:', userData); // Debug log
     setUser(userData);
     localStorage.setItem('ugunja_user', JSON.stringify(userData));
     setAppState('dashboard');
+    console.log('App state set to dashboard'); // Debug log
   };
 
   const handleLogout = () => {
@@ -62,6 +64,8 @@ export default function HomePage() {
   const renderDashboard = () => {
     if (!user) return null;
 
+    console.log('Rendering dashboard for user:', user); // Debug log
+
     switch (user.role) {
       case 'customer':
         return <CustomerDashboard user={user} onLogout={handleLogout} />;
@@ -70,7 +74,8 @@ export default function HomePage() {
       case 'dispatcher':
         return <DispatcherDashboard user={user} onLogout={handleLogout} />;
       default:
-        return null;
+        console.log('Unknown role:', user.role); // Debug log
+        return <div>Unknown role: {user.role}</div>;
     }
   };
 
@@ -87,6 +92,13 @@ export default function HomePage() {
         />
       )}
       {appState === 'dashboard' && renderDashboard()}
+      
+      {/* Debug info */}
+      <div style={{ position: 'fixed', top: 0, right: 0, background: 'rgba(0,0,0,0.8)', color: 'white', padding: '10px', fontSize: '12px', zIndex: 9999 }}>
+        <div>App State: {appState}</div>
+        <div>User: {user ? `${user.name} (${user.role})` : 'None'}</div>
+        <div>Selected Role: {selectedRole || 'None'}</div>
+      </div>
     </>
   );
 }

@@ -5,6 +5,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Flame, ArrowLeft, Eye, EyeOff, Users, Truck, Zap } from 'lucide-react';
+import { authAPI } from '../lib/api';
 
 interface AuthPageProps {
   selectedRole: 'customer' | 'driver' | 'dispatcher';
@@ -48,20 +49,28 @@ export function AuthPage({ selectedRole, onLogin, onBack }: AuthPageProps) {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate API call - In production, replace with actual API call
-    // Example: const response = await fetch('/api/auth/login', { method: 'POST', body: JSON.stringify({...loginForm, role: selectedRole}) })
-    setTimeout(() => {
-      const user = {
-        id: Math.random().toString(36).substr(2, 9),
+    try {
+      const response = await authAPI.login({
         email: loginForm.email,
-        role: selectedRole,
-        name: loginForm.email.split('@')[0],
-        token: 'mock_jwt_token_' + Math.random().toString(36).substr(2, 9)
+        password: loginForm.password,
+        role: selectedRole
+      });
+
+      const user = {
+        id: response.user.id.toString(),
+        email: response.user.email,
+        role: response.user.role.toLowerCase(),
+        name: response.user.username,
+        token: response.tokens.access_token
       };
       
       onLogin(user);
+    } catch (error) {
+      console.error('Login error:', error);
+      alert('Login failed. Please check your credentials.');
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -73,20 +82,29 @@ export function AuthPage({ selectedRole, onLogin, onBack }: AuthPageProps) {
 
     setIsLoading(true);
 
-    // Simulate API call - In production, replace with actual API call
-    // Example: const response = await fetch('/api/auth/register', { method: 'POST', body: JSON.stringify({...registerForm, role: selectedRole}) })
-    setTimeout(() => {
-      const user = {
-        id: Math.random().toString(36).substr(2, 9),
-        email: registerForm.email,
-        role: selectedRole,
+    try {
+      const response = await authAPI.register({
         name: registerForm.name,
-        token: 'mock_jwt_token_' + Math.random().toString(36).substr(2, 9)
+        email: registerForm.email,
+        password: registerForm.password,
+        role: selectedRole
+      });
+
+      const user = {
+        id: response.user.id.toString(),
+        email: response.user.email,
+        role: response.user.role.toLowerCase(),
+        name: response.user.username,
+        token: response.tokens.access_token
       };
       
       onLogin(user);
+    } catch (error) {
+      console.error('Registration error:', error);
+      alert('Registration failed. Please try again.');
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   return (

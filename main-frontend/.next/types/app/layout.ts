@@ -1,4 +1,4 @@
-// File: /Users/ash/Downloads/greenwells/main-frontend/app/layout.tsx
+// File: C:\Users\ADMIN\OneDrive\Desktop\OSBORN\GREENHACK 2025\UGUNJA\latest\greenwells\main-frontend\app\layout.tsx
 import * as entry from '../../../app/layout.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
