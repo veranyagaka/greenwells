@@ -56,14 +56,17 @@ export function AuthPage({ selectedRole, onLogin, onBack }: AuthPageProps) {
         role: selectedRole
       });
 
+      console.log('Login response:', response);
+      
       const user = {
         id: response.user.id.toString(),
         email: response.user.email,
-        role: response.user.role.toLowerCase(),
+        role: response.user.role,
         name: response.user.username,
         token: response.tokens.access_token
       };
       
+      console.log('Final user object:', user);
       onLogin(user);
     } catch (error) {
       console.error('Login error:', error);
@@ -90,14 +93,17 @@ export function AuthPage({ selectedRole, onLogin, onBack }: AuthPageProps) {
         role: selectedRole
       });
 
+      console.log('Register response:', response);
+      
       const user = {
         id: response.user.id.toString(),
         email: response.user.email,
-        role: response.user.role.toLowerCase(),
+        role: response.user.role,
         name: response.user.username,
         token: response.tokens.access_token
       };
       
+      console.log('Final user object:', user);
       onLogin(user);
     } catch (error) {
       console.error('Registration error:', error);

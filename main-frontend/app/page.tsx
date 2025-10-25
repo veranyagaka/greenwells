@@ -64,9 +64,12 @@ export default function HomePage() {
   const renderDashboard = () => {
     if (!user) return null;
 
-    console.log('Rendering dashboard for user:', user); // Debug log
+    console.log('Rendering dashboard for user:', user);
 
-    switch (user.role) {
+    const roleLower = user.role.toLowerCase();
+    console.log('Role after toLowerCase:', roleLower);
+    
+    switch (roleLower) {
       case 'customer':
         return <CustomerDashboard user={user} onLogout={handleLogout} />;
       case 'driver':
@@ -74,8 +77,13 @@ export default function HomePage() {
       case 'dispatcher':
         return <DispatcherDashboard user={user} onLogout={handleLogout} />;
       default:
-        console.log('Unknown role:', user.role); // Debug log
-        return <div>Unknown role: {user.role}</div>;
+        console.log('Unknown role:', user.role);
+        return <div className="p-8 text-center">
+          <h2 className="text-2xl font-bold mb-4">Unknown Role: {user.role}</h2>
+          <button onClick={handleLogout} className="mt-4 px-4 py-2 bg-red-500 text-white rounded">
+            Logout
+          </button>
+        </div>;
     }
   };
 
@@ -92,13 +100,6 @@ export default function HomePage() {
         />
       )}
       {appState === 'dashboard' && renderDashboard()}
-      
-      {/* Debug info */}
-      <div style={{ position: 'fixed', top: 0, right: 0, background: 'rgba(0,0,0,0.8)', color: 'white', padding: '10px', fontSize: '12px', zIndex: 9999 }}>
-        <div>App State: {appState}</div>
-        <div>User: {user ? `${user.name} (${user.role})` : 'None'}</div>
-        <div>Selected Role: {selectedRole || 'None'}</div>
-      </div>
     </>
   );
 }

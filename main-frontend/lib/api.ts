@@ -105,17 +105,31 @@ export const apiRequest = async <T>(
 // Authentication API calls
 export const authAPI = {
   login: async (credentials: { email: string; password: string; role: string }) => {
-    return apiRequest<{ user: any; tokens: any }>('/auth/login/', {
+    const response = await apiRequest<{ user: any; tokens: any }>('/auth/login/', {
       method: 'POST',
       body: JSON.stringify(credentials),
     });
+    
+    // Normalize role to lowercase
+    if (response.user && response.user.role) {
+      response.user.role = response.user.role.toLowerCase();
+    }
+    
+    return response;
   },
 
   register: async (userData: { name: string; email: string; password: string; role: string }) => {
-    return apiRequest<{ user: any; tokens: any }>('/auth/signup/', {
+    const response = await apiRequest<{ user: any; tokens: any }>('/auth/signup/', {
       method: 'POST',
       body: JSON.stringify(userData),
     });
+    
+    // Normalize role to lowercase
+    if (response.user && response.user.role) {
+      response.user.role = response.user.role.toLowerCase();
+    }
+    
+    return response;
   },
 
   logout: async () => {

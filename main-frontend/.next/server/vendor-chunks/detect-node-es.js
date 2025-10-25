@@ -10,13 +10,13 @@ exports.id = "vendor-chunks/detect-node-es";
 exports.ids = ["vendor-chunks/detect-node-es"];
 exports.modules = {
 
-/***/ "(ssr)/./node_modules/detect-node-es/es5/node.js":
-/*!*************************************************!*\
-  !*** ./node_modules/detect-node-es/es5/node.js ***!
-  \*************************************************/
+/***/ "(ssr)/../node_modules/detect-node-es/es5/node.js":
+/*!**************************************************!*\
+  !*** ../node_modules/detect-node-es/es5/node.js ***!
+  \**************************************************/
 /***/ ((module) => {
 
-eval("// Only Node.JS has a process variable that is of [[Class]] process\nmodule.exports.isNode = Object.prototype.toString.call(typeof process !== 'undefined' ? process : 0) === '[object process]';\n//# sourceURL=[module]\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiKHNzcikvLi9ub2RlX21vZHVsZXMvZGV0ZWN0LW5vZGUtZXMvZXM1L25vZGUuanMiLCJtYXBwaW5ncyI6IkFBQUE7QUFDQSxxQkFBcUIiLCJzb3VyY2VzIjpbIndlYnBhY2s6Ly91Z3VuamEtbHBnLXBsYXRmb3JtLy4vbm9kZV9tb2R1bGVzL2RldGVjdC1ub2RlLWVzL2VzNS9ub2RlLmpzP2ZhZDAiXSwic291cmNlc0NvbnRlbnQiOlsiLy8gT25seSBOb2RlLkpTIGhhcyBhIHByb2Nlc3MgdmFyaWFibGUgdGhhdCBpcyBvZiBbW0NsYXNzXV0gcHJvY2Vzc1xubW9kdWxlLmV4cG9ydHMuaXNOb2RlID0gT2JqZWN0LnByb3RvdHlwZS50b1N0cmluZy5jYWxsKHR5cGVvZiBwcm9jZXNzICE9PSAndW5kZWZpbmVkJyA/IHByb2Nlc3MgOiAwKSA9PT0gJ1tvYmplY3QgcHJvY2Vzc10nO1xuIl0sIm5hbWVzIjpbXSwic291cmNlUm9vdCI6IiJ9\n//# sourceURL=webpack-internal:///(ssr)/./node_modules/detect-node-es/es5/node.js\n");
+eval("// Only Node.JS has a process variable that is of [[Class]] process\nmodule.exports.isNode = Object.prototype.toString.call(typeof process !== 'undefined' ? process : 0) === '[object process]';\n//# sourceURL=[module]\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiKHNzcikvLi4vbm9kZV9tb2R1bGVzL2RldGVjdC1ub2RlLWVzL2VzNS9ub2RlLmpzIiwibWFwcGluZ3MiOiJBQUFBO0FBQ0EscUJBQXFCIiwic291cmNlcyI6WyJ3ZWJwYWNrOi8vdWd1bmphLWxwZy1wbGF0Zm9ybS8uLi9ub2RlX21vZHVsZXMvZGV0ZWN0LW5vZGUtZXMvZXM1L25vZGUuanM/ZGI2OSJdLCJzb3VyY2VzQ29udGVudCI6WyIvLyBPbmx5IE5vZGUuSlMgaGFzIGEgcHJvY2VzcyB2YXJpYWJsZSB0aGF0IGlzIG9mIFtbQ2xhc3NdXSBwcm9jZXNzXG5tb2R1bGUuZXhwb3J0cy5pc05vZGUgPSBPYmplY3QucHJvdG90eXBlLnRvU3RyaW5nLmNhbGwodHlwZW9mIHByb2Nlc3MgIT09ICd1bmRlZmluZWQnID8gcHJvY2VzcyA6IDApID09PSAnW29iamVjdCBwcm9jZXNzXSc7XG4iXSwibmFtZXMiOltdLCJzb3VyY2VSb290IjoiIn0=\n//# sourceURL=webpack-internal:///(ssr)/../node_modules/detect-node-es/es5/node.js\n");
 
 /***/ })
 
