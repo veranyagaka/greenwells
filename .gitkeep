@@ -1,0 +1,15 @@
+# GreenWells LPG Platform
+# 
+# This is a monorepo with:
+# - Django backend in ./backend/
+# - Next.js frontend in ./main-frontend/
+#
+# To work on the Next.js app, go to ./main-frontend/
+# To work on the Django app, go to ./backend/
+#
+# Use npm run dev from root to start both servers
+
+# This file is intentionally blank as dependencies are in subdirectories
+# Next.js version is defined in main-frontend/package.json
+# Django version is defined in backend/requirements.txt
+
