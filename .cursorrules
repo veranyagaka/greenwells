@@ -1,0 +1,20 @@
+{
+  "name": "greenwells-lpg-platform",
+  "type": "monorepo",
+  "projects": {
+    "backend": {
+      "path": "backend",
+      "type": "django",
+      "framework": "django"
+    },
+    "frontend": {
+      "path": "main-frontend",
+      "type": "nextjs",
+      "framework": "nextjs"
+    }
+  },
+  "workspaces": [
+    "main-frontend"
+  ]
+}
+

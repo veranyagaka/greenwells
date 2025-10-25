@@ -1,0 +1,29 @@
+{
+  "folders": [
+    {
+      "path": ".",
+      "name": "GreenWells Root"
+    },
+    {
+      "path": "main-frontend",
+      "name": "Frontend (Next.js)"
+    },
+    {
+      "path": "backend",
+      "name": "Backend (Django)"
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/node_modules": true,
+      "**/.next": true,
+      "**/__pycache__": true
+    },
+    "search.exclude": {
+      "**/node_modules": true,
+      "**/.next": true,
+      "**/__pycache__": true
+    }
+  }
+}
+
