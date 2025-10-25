@@ -1,10 +1,11 @@
 {
   "name": "greenwells-lpg-platform",
   "version": "1.0.0",
-  "description": "GreenWells LPG Delivery Fleet Management System",
+  "description": "GreenWells LPG Delivery Fleet Management System - MONOREPO",
   "author": "GreenWells Team",
   "license": "MIT",
   "private": true,
+  "note": "This is a monorepo orchestrator. Next.js is in main-frontend/, Django is in backend/",
   "scripts": {
     "setup": "npm-run-all setup:*",
     "setup:frontend": "cd main-frontend && npm install",

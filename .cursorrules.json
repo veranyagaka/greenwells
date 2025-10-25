@@ -1,0 +1,28 @@
+{
+  "name": "greenwells-lpg-platform",
+  "version": "1.0.0",
+  "type": "monorepo",
+  "description": "GreenWells LPG Delivery Platform - Full stack monorepo",
+  "workspaces": [
+    {
+      "name": "frontend",
+      "path": "main-frontend",
+      "type": "nextjs",
+      "framework": "next",
+      "version": "14.0.0"
+    },
+    {
+      "name": "backend",
+      "path": "backend",
+      "type": "django",
+      "framework": "django",
+      "version": "5.2.7"
+    }
+  ],
+  "scripts": {
+    "dev": "npm-run-all --parallel dev:frontend dev:backend",
+    "build": "npm-run-all build:frontend build:backend",
+    "start": "npm-run-all --parallel start:frontend start:backend"
+  },
+  "note": "This is a monorepo. Next.js is in main-frontend/, Django is in backend/"
+

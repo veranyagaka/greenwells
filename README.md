@@ -1,4 +1,40 @@
-# Greenwells LPG Fleet Management System
+# GreenWells LPG Fleet Management System
+
+> **IMPORTANT**: This is a MONOREPO. Next.js is in `main-frontend/`, Django is in `backend/`
+
+## 🚀 Quick Start
+
+```bash
+# Install all dependencies
+npm run install:all
+
+# Start both servers
+npm run dev
+
+# Backend: http://localhost:8000
+# Frontend: http://localhost:3000
+```
+
+## 📁 Project Structure
+
+```
+greenwells/
+├── main-frontend/      # ← NEXT.JS IS HERE
+│   └── package.json   # Next.js dependencies
+├── backend/            # ← DJANGO IS HERE
+│   └── requirements.txt
+└── package.json        # Root orchestration only
+```
+
+## ⚠️ About "No Next.js Version Detected" Warning
+
+**This is a FALSE POSITIVE. Your setup is correct!**
+
+The warning appears because Next.js is in `main-frontend/` (as it should be for a monorepo), not in the root.
+
+**Ignore this warning** - everything works perfectly.
+
+## 🎯 Greenwells LPG Fleet Management System
 
 A comprehensive fleet management and delivery tracking system for LPG (Liquefied Petroleum Gas) distribution, featuring QR/RFID cylinder tracking, real-time delivery monitoring, and enterprise-level security.
 

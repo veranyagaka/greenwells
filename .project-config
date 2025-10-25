@@ -1,0 +1,8 @@
+# This file tells IDEs and tools where Next.js is located
+
+Project Type: Monorepo
+Next.js Location: ./main-frontend
+Django Location: ./backend
+
+Do NOT add Next.js to root package.json - it belongs in main-frontend/
+
