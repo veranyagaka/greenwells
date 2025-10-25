@@ -61,7 +61,8 @@
     "npm": ">=8.0.0",
     "python": ">=3.8"
   },
-  "workspaces": [
-    "main-frontend"
-  ]
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/greenwells.git"
+  }
 }
