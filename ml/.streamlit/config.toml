@@ -1,0 +1,9 @@
+[theme]
+# This is your Ugunja orange/amber accent
+primaryColor="#FFA500"
+
+# This is your dark mode theme
+backgroundColor="#111111"
+secondaryBackgroundColor="#2E2E2E"
+textColor="#FFFFFF"
+font="sans serif"
